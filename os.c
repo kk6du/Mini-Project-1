@@ -64,4 +64,3 @@ void Timer1A_Handler(void){
   TIMER1_ICR_R = TIMER_ICR_TATOCINT;// acknowledge timer1A timeout
 	(*PeriodicTask)();
 }
-
