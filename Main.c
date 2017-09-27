@@ -4,6 +4,7 @@
 #include "os.h"
 #include "joystick.h"
 #include "FIFO.h"
+#include "tm4c123gh6pm.h"
 
 void DisableInterrupts(void); // Disable interrupts
 void EnableInterrupts(void);  // Enable interrupts
@@ -26,20 +27,21 @@ void WaitForInterrupt(void);  // low power mode
 uint16_t origin[2]; // the original ADC value of x,y if the joystick is not touched
 int16_t x = 63;  // horizontal position of the crosshair, initially 63
 int16_t y = 63;  // vertical position of the crosshair, initially 63
-int16_t prevx,prevy;
+int16_t prevx = 63;
+int16_t prevy = 63;
 uint8_t select;  // joystick push
 
 //---------------------User debugging-----------------------
-
-#define TEST_TIMER 
+//#define TEST_TIMER
 #define PE0  (*((volatile unsigned long *)0x40024004))
 #define TEST_PERIOD 800000  //defined by user
+#define PERIOD 2000000
 
 unsigned long Count;   // number of times thread loops
 
 void PortE_Init(void){
   SYSCTL_RCGCGPIO_R |= 0x10;       // activate port E
-  while((SYSCTL_RCGCGPIO_R & 0x10) == 0){} 
+  while((SYSCTL_RCGCGPIO_R & 0x10) == 0){}
   GPIO_PORTE_DIR_R |= 0x0F;    // make PE3-0 output heartbeats
   GPIO_PORTE_AFSEL_R &= ~0x0F;   // disable alt funct on PE3-0
   GPIO_PORTE_DEN_R |= 0x0F;     // enable digital I/O on PE3-0
@@ -62,12 +64,52 @@ void Producer(void){
 	rxDataType data;
 	BSP_Joystick_Input(&rawX,&rawY,&select);
 	// here is your code
+	if (RxFifo_Put(data) == RXFIFOSUCCESS)
+	{
+		x = ((double)(rawX - origin[0]) * (double) ((double)(0x7F)/(double)(0x1000)));
+		y = ((double)(rawY - origin[1]) * (double) ((double)(0x7F)/(double)(0x1000)));
+		//origin plus delta -> delta = curr - origin then  do prev + delta
+		x = x/4 + prevx;
+		y = (-y/4) + prevy;
+		if (x < 0) //if x is less than 0
+		{
+			x = 0;
+		}
+		if (x > 0x80) //if x is greater than 128
+		{
+			x = 0x80;
+		}
+		if (y < 0)
+		{
+			y = 0;
+		}
+		if (y > 0x74)
+		{
+			y = 0x74;
+		}
+	}
+	data.x = x;
+	data.y = y;
+	RxFifo_Put(data);
    #endif
 }
 
 void Consumer(void){
 	rxDataType data;
 	// here is your code
+
+	if (RxFifo_Get(&data) == RXFIFOSUCCESS)
+	{
+		RxFifo_Get(&data);
+		BSP_LCD_DrawFastHLine(prevx-4, prevy, 8, LCD_BLACK);
+	  BSP_LCD_DrawFastVLine(prevx, prevy-4, 8, LCD_BLACK);
+		BSP_LCD_DrawFastHLine(data.x-4, data.y, 8, LCD_RED);
+		BSP_LCD_DrawFastVLine(data.x, data.y-4, 8, LCD_RED);
+		prevx = data.x;
+		prevy = data.y;
+	}
+	BSP_LCD_Message (1, 0, 0, "X: ", prevx);
+	BSP_LCD_Message (1, 0, 8, "Y: ", prevy);
 }
 
 int main(void){
@@ -79,13 +121,13 @@ int main(void){
 	while(1){}
   #else
   	BSP_LCD_Init();        // initialize LCD
-	BSP_Joystick_Init();   // initialize Joystick
-  	CrossHair_Init();      
+	  BSP_Joystick_Init();   // initialize Joystick
+  	CrossHair_Init();
   	RxFifo_Init();
 	OS_AddPeriodicThread(&Producer,PERIOD,1);
 	while(1){
 	   Consumer();
   	}
   #endif
-} 
- 
+		//in LCD display take device * 6 + parameter + 1
+}

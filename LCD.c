@@ -1419,3 +1419,20 @@ void BSP_LCD_PlotIncrement(void){
   }
   BSP_LCD_DrawFastVLine(TimeIndex + 11, 17, 100, PlotBGColor);
 }
+
+void BSP_LCD_Message (int device, int line, int col, char *string, unsigned int value)
+{
+	if (device == 0) //top half
+	{
+		BSP_LCD_SetCursor(col, line + 5);
+		BSP_LCD_DrawString(col, line + 5, string, LCD_WHITE);
+		BSP_LCD_SetCursor(col+2, line + 5);
+		BSP_LCD_OutUDec4(value, LCD_YELLOW);
+	} else if (device == 1) //bottom half
+	{
+		BSP_LCD_SetCursor(col, line + 12);
+		BSP_LCD_DrawString(col, line + 12, string, LCD_WHITE);
+		BSP_LCD_SetCursor(col+2, line + 12);
+		BSP_LCD_OutUDec4(value, LCD_YELLOW);
+	}
+}

@@ -8,7 +8,7 @@
  OR CONSEQUENTIAL DAMAGES, FOR ANY REASON WHATSOEVER.
  For more information about my classes, my research, and my books, see
  http://users.ece.utexas.edu/~valvano/
- 
+
  Modified by Sile Shu, Sep 16, 2017
 */
 
@@ -39,7 +39,7 @@
                                             // Mask
 #define TIMER_ICR_TATOCINT      0x00000001  // GPTM TimerA Time-Out Raw
                                             // Interrupt
-#define TIMER_TAILR_M           0xFFFFFFFF  // GPTM Timer A Interval Load 
+#define TIMER_TAILR_M           0xFFFFFFFF  // GPTM Timer A Interval Load
 
 void DisableInterrupts(void); // Disable interrupts
 void EnableInterrupts(void);  // Enable interrupts
@@ -47,35 +47,52 @@ long StartCritical (void);    // previous I bit, disable interrupts
 void EndCritical(long sr);    // restore I bit to previous value
 void WaitForInterrupt(void);  // low power mode
 
-void InitTimer1A(unsigned long period) {
+char flag = 0;
+
+void InitTimer1A(unsigned long period, unsigned long priority) {
 	long sr;
 	volatile unsigned long delay;
-	
+
 	sr = StartCritical();
   SYSCTL_RCGCTIMER_R |= 0x02;
 	while((SYSCTL_RCGCTIMER_R & 0x02) == 0){} // allow time for clock to stabilize
-	
-//  TIMER1_CTL_R &= ; // 1) disable timer1A during setup, please complete and uncomment this line
+
+  TIMER1_CTL_R &= TIMER_CTL_TAEN; // 1) disable timer1A during setup, please complete and uncomment this line
                                    // 2) configure for 32-bit timer mode
   TIMER1_CFG_R = TIMER_CFG_32_BIT_TIMER;
                                    // 3) configure for periodic mode, default down-count settings
   TIMER1_TAMR_R = TIMER_TAMR_TAMR_PERIOD;
-//  TIMER1_TAILR_R = ;     // 4) reload value, please complete and uncomment this line
+  TIMER1_TAILR_R = period -1;     // 4) reload value, please complete and uncomment this line
                                    // 5) clear timer1A timeout flag
   TIMER1_ICR_R = TIMER_ICR_TATOCINT;
   TIMER1_IMR_R |= TIMER_IMR_TATOIM;// 6) arm timeout interrupt
 								   // 7) priority shifted to bits 15-13 for timer1A
-  NVIC_PRI5_R = (NVIC_PRI5_R&0xFFFF00FF)|(3 << 13);	//3
+
+  NVIC_PRI5_R = (NVIC_PRI5_R&0xFFFF00FF)|((priority & 7) << 13);	//3 (priority & 7) instead of 3
   NVIC_EN0_R = NVIC_EN0_INT21;     // 8) enable interrupt 21 in NVIC
   TIMER1_TAPR_R = 0;
   TIMER1_CTL_R |= TIMER_CTL_TAEN;  // 9) enable timer1A
-	
+
   EndCritical(sr);
 }
 
 void (*PeriodicTask)(void);
 
-void Timer1A_Handler(void){ 
+void Timer1A_Handler(void){
   TIMER1_ICR_R = TIMER_ICR_TATOCINT;// acknowledge timer1A timeout
 	(*PeriodicTask)();
+}
+
+int OS_AddPeriodicThread(void(*task)(void),unsigned long period, unsigned long priority)
+{
+	//if (flag == 0)
+	//{
+		PeriodicTask = task;
+		InitTimer1A(2000000, priority); //2000000, 1
+		flag = 1;
+		return 1;
+	//} else
+	//{
+	//	return 0;
+	//}
 }
